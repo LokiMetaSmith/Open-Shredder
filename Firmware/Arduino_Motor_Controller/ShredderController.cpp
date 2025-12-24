@@ -55,13 +55,15 @@ void ShredderController::update() {
                 return;
             }
 
-            // Check Jam/Fault
-            // We use a simple debounce or instant check? Instant for now.
-            if (_motor->getLoad() > _config.currentLimit || _motor->isFaulted()) {
-                _state = STATE_JAM_DETECTED;
-                _stateStartTime = now;
-                _motor->stop();
-                _jamCount++;
+            // Inrush Masking: Ignore current spikes during the first 500ms of entering STATE_FORWARD
+            if (now - _stateStartTime > 500) {
+                // Check Jam/Fault
+                if (_motor->getLoad() > _config.currentLimit || _motor->isFaulted()) {
+                    _state = STATE_JAM_DETECTED;
+                    _stateStartTime = now;
+                    _motor->stop();
+                    _jamCount++;
+                }
             }
             break;
 

@@ -41,8 +41,14 @@ void test_dc_motor_jam_detection() {
     assert(controller.getState() == STATE_FORWARD);
     assert(pinStates[3] > 0); // PWM should be active
 
-    // 2. Simulate Jam
-    analogInputs[A0] = 600; // Exceed limit
+    // 1a. Verify Inrush Masking
+    // We are at time 0. Jam check starts after 500ms.
+    analogInputs[A0] = 600; // Spike!
+    controller.update();
+    assert(controller.getState() == STATE_FORWARD); // Should IGNORE spike
+
+    // 2. Simulate Jam (After mask time)
+    mock_millis += 600; // Advance past 500ms
     controller.update();
     assert(controller.getState() == STATE_JAM_DETECTED);
     assert(pinStates[3] == 0); // Should stop
@@ -89,6 +95,7 @@ void test_impact_mode() {
     controller.start();
 
     // Trigger Jam
+    mock_millis += 600; // Past inrush
     analogInputs[A0] = 600;
     controller.update();
     assert(controller.getState() == STATE_JAM_DETECTED);

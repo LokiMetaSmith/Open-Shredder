@@ -1,3 +1,4 @@
+import math
 from build123d import *
 from cycloidal_gear import cycloidal_disk
 from impact_drive import impact_drive_mechanism
@@ -42,13 +43,20 @@ def gearbox_assembly(
 
     # 3. Shafts
     input_shaft_dia = 8.0
-    output_shaft_dia = 12.0
+    output_shaft_hex = 25.0 # 25mm Hex
 
     with BuildPart() as input_shaft:
         Cylinder(radius=input_shaft_dia/2, height=60.0)
 
     with BuildPart() as output_shaft:
-        Cylinder(radius=output_shaft_dia/2, height=60.0)
+        # Hex Shaft
+        hex_radius = output_shaft_hex / math.sqrt(3)
+        with BuildSketch():
+            RegularPolygon(radius=hex_radius, side_count=6)
+        extrude(amount=100.0) # Longer output shaft for the drum
+
+        # Add a circular bearing interface at the gearbox end?
+        # For simplicity, we keep it hex and assume hex bearings or adapters.
 
     # 4. Assembly List
     parts_list = [
