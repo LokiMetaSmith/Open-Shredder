@@ -25,24 +25,36 @@ def gearbox_assembly(
         num_pins=num_pins
     )
 
-    # 2. Housing
+    # 2. Configure Motor Interface
+    if motor_type == "NEMA34":
+        housing_od = 100.0
+        mount_spacing = 69.6
+        input_shaft_dia = 14.0
+        # Pilot cutout for NEMA 34 is usually ~73mm.
+        # We'll just ensure the inner cavity is large enough.
+        inner_cavity_dia = 75.0
+    else: # Default to NEMA23
+        housing_od = 80.0
+        mount_spacing = 47.14
+        input_shaft_dia = 8.0
+        inner_cavity_dia = 60.0
+
+    # 3. Housing
     # A simple box housing the pins
-    housing_od = 80.0
     housing_height = 40.0
 
     with BuildPart() as housing:
         Cylinder(radius=housing_od/2, height=housing_height)
         with Locations((0,0)):
-            Cylinder(radius=60.0/2, height=housing_height-5, mode=Mode.SUBTRACT) # Inner cavity
+            Cylinder(radius=inner_cavity_dia/2, height=housing_height-5, mode=Mode.SUBTRACT) # Inner cavity
 
-        # Motor Mount Holes (NEMA 23 standard: 47.14mm spacing)
-        mount_spacing = 47.14
+        # Motor Mount Holes
+        hole_radius = 6.5 / 2 if motor_type == "NEMA34" else 5.5 / 2
         with Locations((0,0, -housing_height/2)):
             with GridLocations(mount_spacing, mount_spacing, 2, 2):
-                Cylinder(radius=5.0/2, height=10, mode=Mode.SUBTRACT)
+                Cylinder(radius=hole_radius, height=10, mode=Mode.SUBTRACT)
 
-    # 3. Shafts
-    input_shaft_dia = 8.0
+    # 4. Shafts
     output_shaft_hex = 25.0 # 25mm Hex
 
     with BuildPart() as input_shaft:
@@ -58,7 +70,7 @@ def gearbox_assembly(
         # Add a circular bearing interface at the gearbox end?
         # For simplicity, we keep it hex and assume hex bearings or adapters.
 
-    # 4. Assembly List
+    # 5. Assembly List
     parts_list = [
         housing.part,
         disk.move(Location((0,0,5))), # Shift disk up
@@ -66,7 +78,7 @@ def gearbox_assembly(
         output_shaft.part.move(Location((0,0,10)))
     ]
 
-    # 5. Impact Drive (Optional)
+    # 6. Impact Drive (Optional)
     if use_impact_drive:
         slip, hammer = impact_drive_mechanism(shaft_diameter=input_shaft_dia)
         # Attach Slip Disk to Input Shaft (top)
