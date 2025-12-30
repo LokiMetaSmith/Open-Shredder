@@ -11,7 +11,8 @@ def full_machine_assembly():
 
     # 1. Gearbox
     # (Includes Housing, Input Shaft, Output Hex Shaft, Impact Drive)
-    gearbox = gearbox_assembly(ratio=10.0, use_impact_drive=True)
+    # Using NEMA 34 Stepper Motor for high torque and home use
+    gearbox = gearbox_assembly(ratio=10.0, motor_type="NEMA34", use_impact_drive=True)
 
     # Extract the output shaft location relative to the gearbox?
     # The gearbox output shaft was generated at (0,0,10) in the sub-assembly.
