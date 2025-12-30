@@ -26,18 +26,25 @@ def gearbox_assembly(
     )
 
     # 2. Configure Motor Interface
+    # WIPER: Generic 3-bolt pattern (approx 50.8mm circle)
     if motor_type == "NEMA34":
-        housing_od = 100.0
+        housing_od = 120.0 # Increased from 100mm to fit 69.6mm spacing (corner rad ~49mm + hole)
         mount_spacing = 69.6
         input_shaft_dia = 14.0
-        # Pilot cutout for NEMA 34 is usually ~73mm.
-        # We'll just ensure the inner cavity is large enough.
         inner_cavity_dia = 75.0
+        mount_style = "GRID"
+    elif motor_type == "WIPER":
+        housing_od = 120.0 # Wiper motors are bulky
+        mount_spacing = 50.8 # Bolt Circle Diameter (2 inches)
+        input_shaft_dia = 10.0 # Approximate for tapered shaft
+        inner_cavity_dia = 75.0
+        mount_style = "POLAR"
     else: # Default to NEMA23
         housing_od = 80.0
         mount_spacing = 47.14
         input_shaft_dia = 8.0
         inner_cavity_dia = 60.0
+        mount_style = "GRID"
 
     # 3. Housing
     # A simple box housing the pins
@@ -49,10 +56,14 @@ def gearbox_assembly(
             Cylinder(radius=inner_cavity_dia/2, height=housing_height-5, mode=Mode.SUBTRACT) # Inner cavity
 
         # Motor Mount Holes
-        hole_radius = 6.5 / 2 if motor_type == "NEMA34" else 5.5 / 2
+        hole_radius = 6.5 / 2 if motor_type in ["NEMA34", "WIPER"] else 5.5 / 2
         with Locations((0,0, -housing_height/2)):
-            with GridLocations(mount_spacing, mount_spacing, 2, 2):
-                Cylinder(radius=hole_radius, height=10, mode=Mode.SUBTRACT)
+            if mount_style == "GRID":
+                with GridLocations(mount_spacing, mount_spacing, 2, 2):
+                    Cylinder(radius=hole_radius, height=10, mode=Mode.SUBTRACT)
+            elif mount_style == "POLAR":
+                with PolarLocations(radius=mount_spacing/2, count=3):
+                    Cylinder(radius=hole_radius, height=10, mode=Mode.SUBTRACT)
 
     # 4. Shafts
     output_shaft_hex = 25.0 # 25mm Hex

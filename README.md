@@ -76,6 +76,12 @@ After reviewing the project requirements for a home-friendly, quiet, and 3D-prin
 - **Shaft Diameter:** 14.0 mm
 - **Driver:** A high-voltage (AC powered or 60V+ DC) stepper driver (e.g., DM860T) is recommended to maximize torque at speed.
 
+### Alternative Option: Windshield Wiper Motor
+For a low-cost, high-torque salvage option, the gearbox also supports a **Generic Wiper Motor** pattern.
+- **Mounting:** 3-Bolt pattern (approx 2" / 50.8mm bolt circle).
+- **Configuration:** Set `motor_type="WIPER"` in the assembly script.
+- **Note:** Requires a high-current 12V DC power supply (e.g., PC PSU or Car Battery). Mounting holes may need slotting for specific motor variations.
+
 # Cycloidal Generators:
 https://github.com/RepRapLtd/RobotComponents/tree/main/RRL-cycloidal-drive
 https://github.com/mawildoer/cycloidal_generator
