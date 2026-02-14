@@ -48,5 +48,5 @@ This document tracks the ongoing development, optimization, and future feature r
 
 ### In Progress / TODO
 - [ ] **Assembly Manual:** Step-by-step PDF or Wiki for assembling the physical hardware.
-- [ ] **Bill of Materials (BOM):** Auto-generate a CSV BOM from the python scripts (bearings, bolts, filament weight).
+- [x] **Bill of Materials (BOM):** Auto-generate a CSV BOM from the python scripts (`generate_bom.py`).
 - [ ] **Tuning Guide:** Instructions on how to interpret validation errors and manually tune the `shredder_config.json`.
