@@ -1,54 +1,51 @@
 import math
+import sys
+import os
+
+try:
+    from parameters.shredder_config import ShredderSystemConfig, default_config
+except ImportError:
+    # Add parameters directory to sys.path if running as script
+    sys.path.append(os.path.join(os.path.dirname(__file__), 'parameters'))
+    from shredder_config import ShredderSystemConfig, default_config
+
 from build123d import *
 from cycloidal_gear import cycloidal_disk
 from impact_drive import impact_drive_mechanism
 
-def gearbox_assembly(
-    ratio=10.0,
-    motor_type="NEMA23",
-    input_interface="KEYED_SHAFT", # or BELT_GT2
-    use_impact_drive=True
-):
+def gearbox_assembly(config: ShredderSystemConfig):
     """
-    Generates the full gearbox assembly.
+    Generates the full gearbox assembly based on the provided configuration.
     """
+
+    # Extract config sections for convenience
+    motor_conf = config.motor
+    gearbox_conf = config.gearbox
 
     # 1. Generate Cycloidal Components
-    # Simplify ratio logic for demo: Ratio approx N/(N-n).
-    # If N=11, n=10 => Ratio=10.
-    num_lobes = 10
-    num_pins = 11
-
     disk = cycloidal_disk(
-        pin_circle_diameter=50.0,
-        num_lobes=num_lobes,
-        num_pins=num_pins
+        pin_circle_diameter=gearbox_conf.pin_circle_diameter_mm,
+        num_lobes=gearbox_conf.num_lobes,
+        num_pins=gearbox_conf.num_pins
     )
 
     # 2. Configure Motor Interface
-    # WIPER: Generic 3-bolt pattern (approx 50.8mm circle)
-    if motor_type == "NEMA34":
-        housing_od = 120.0 # Increased from 100mm to fit 69.6mm spacing (corner rad ~49mm + hole)
-        mount_spacing = 69.6
-        input_shaft_dia = 14.0
-        inner_cavity_dia = 75.0
-        mount_style = "GRID"
-    elif motor_type == "WIPER":
-        housing_od = 120.0 # Wiper motors are bulky
-        mount_spacing = 50.8 # Bolt Circle Diameter (2 inches)
-        input_shaft_dia = 10.0 # Approximate for tapered shaft
-        inner_cavity_dia = 75.0
+    housing_od = motor_conf.housing_od_mm
+    mount_spacing = motor_conf.mount_spacing_mm
+    input_shaft_dia = motor_conf.shaft_diameter_mm
+    inner_cavity_dia = 75.0 # Could be parameterized in gearbox_conf if needed
+
+    # Determine mount style based on motor type string or add to config?
+    # For now, keep the logic based on type string for backward compat/simplicity
+    if motor_conf.type == "WIPER":
         mount_style = "POLAR"
-    else: # Default to NEMA23
-        housing_od = 80.0
-        mount_spacing = 47.14
-        input_shaft_dia = 8.0
-        inner_cavity_dia = 60.0
+        mount_count = 3
+    else: # NEMA34, NEMA23, GRID
         mount_style = "GRID"
+        mount_count = 4
 
     # 3. Housing
-    # A simple box housing the pins
-    housing_height = 40.0
+    housing_height = gearbox_conf.housing_height_mm
 
     with BuildPart() as housing:
         Cylinder(radius=housing_od/2, height=housing_height)
@@ -56,30 +53,40 @@ def gearbox_assembly(
             Cylinder(radius=inner_cavity_dia/2, height=housing_height-5, mode=Mode.SUBTRACT) # Inner cavity
 
         # Motor Mount Holes
-        hole_radius = 6.5 / 2 if motor_type in ["NEMA34", "WIPER"] else 5.5 / 2
+        hole_radius = 6.5 / 2 if motor_conf.type in ["NEMA34", "WIPER"] else 5.5 / 2
         with Locations((0,0, -housing_height/2)):
             if mount_style == "GRID":
                 with GridLocations(mount_spacing, mount_spacing, 2, 2):
                     Cylinder(radius=hole_radius, height=10, mode=Mode.SUBTRACT)
             elif mount_style == "POLAR":
-                with PolarLocations(radius=mount_spacing/2, count=3):
+                with PolarLocations(radius=mount_spacing/2, count=mount_count):
                     Cylinder(radius=hole_radius, height=10, mode=Mode.SUBTRACT)
 
     # 4. Shafts
-    output_shaft_hex = 25.0 # 25mm Hex
+    output_shaft_hex = gearbox_conf.output_shaft_hex_mm
 
     with BuildPart() as input_shaft:
-        Cylinder(radius=input_shaft_dia/2, height=60.0)
+        Cylinder(radius=input_shaft_dia/2, height=gearbox_conf.input_shaft_length_mm)
 
     with BuildPart() as output_shaft:
         # Hex Shaft
-        hex_radius = output_shaft_hex / math.sqrt(3)
-        with BuildSketch():
-            RegularPolygon(radius=hex_radius, side_count=6)
-        extrude(amount=100.0) # Longer output shaft for the drum
+        hex_radius = output_shaft_hex / math.sqrt(3) # Side to Radius conversion?
+        # RegularPolygon radius is circumradius.
+        # Hex "Size" usually means flat-to-flat (W).
+        # Circumradius R = W / sqrt(3) * 2 ? No.
+        # W = 2 * r_inscribed = 2 * (R * cos(30)) = 2 * R * sqrt(3)/2 = R * sqrt(3).
+        # So R = W / sqrt(3).
+        # If output_shaft_hex is Flat-to-Flat (25mm), then R = 25 / 1.732 = 14.43.
 
-        # Add a circular bearing interface at the gearbox end?
-        # For simplicity, we keep it hex and assume hex bearings or adapters.
+        circum_radius = output_shaft_hex / math.sqrt(3) # Wait, is it?
+        # Check: 25mm hex key. Flat to flat is 25.
+        # Distance from center to flat is 12.5.
+        # Distance from center to corner (R) is 12.5 / cos(30) = 12.5 / (sqrt(3)/2) = 25 / sqrt(3).
+        # Yes.
+
+        with BuildSketch():
+            RegularPolygon(radius=circum_radius, side_count=6)
+        extrude(amount=gearbox_conf.output_shaft_length_mm)
 
     # 5. Assembly List
     parts_list = [
@@ -90,7 +97,7 @@ def gearbox_assembly(
     ]
 
     # 6. Impact Drive (Optional)
-    if use_impact_drive:
+    if gearbox_conf.use_impact_drive:
         slip, hammer = impact_drive_mechanism(shaft_diameter=input_shaft_dia)
         # Attach Slip Disk to Input Shaft (top)
         parts_list.append(slip.move(Location((0,0, 40))))
@@ -100,7 +107,16 @@ def gearbox_assembly(
     return assembly
 
 if __name__ == "__main__":
-    print("Generating Gearbox Assembly...")
-    asm = gearbox_assembly()
+    print("Generating Gearbox Assembly from Config...")
+    # Load config or use default
+    config_path = os.path.join(os.path.dirname(__file__), 'parameters', 'shredder_config.json')
+    if os.path.exists(config_path):
+        print(f"Loading config from {config_path}")
+        cfg = ShredderSystemConfig.load_from_json(config_path)
+    else:
+        print("Using default config")
+        cfg = default_config
+
+    asm = gearbox_assembly(cfg)
     export_step(asm, "shredder_gearbox_assembly.step")
     print("Saved shredder_gearbox_assembly.step")

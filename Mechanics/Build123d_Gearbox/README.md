@@ -4,46 +4,67 @@ This directory contains Python scripts to generate the 3D models for the OpenShr
 
 ## Prerequisites
 
-You need `build123d` installed:
+You need `build123d` and `scikit-fem` installed:
 ```bash
-pip install build123d
+pip install build123d scikit-fem meshio numpy scipy
 ```
 
-## Scripts
+## Parameter Configuration
 
-### 1. `cycloidal_gear.py`
-Generates the core cycloidal disk.
-- Run: `python3 cycloidal_gear.py`
-- Output: `cycloidal_disk.step`
+All design parameters are centralized in `parameters/shredder_config.json`.
+You can modify this file directly, or use the Optimization Agent to tune it.
 
-### 2. `impact_drive.py`
-Generates the slip-disk and impact hammer mechanism.
-- Run: `python3 impact_drive.py`
-- Output: `slip_disk.step`, `impact_hammer.step`
+## New Workflow: Validation & Optimization
 
-### 3. `shredder_components.py`
-Generates the internal shredder parts:
-- **Carbide Insert:** Standard CCMT060204 model.
-- **Drum Disk:** Single slice of the shredder drum (150mm dia) with 25mm Hex bore.
-- **Fixed Knife:** Counter-blade bar.
-- Run: `python3 shredder_components.py`
+We have implemented an AI-driven optimization loop to ensure the design is mechanically sound.
 
-### 4. `pusher_mechanism.py`
-Generates the pusher plate.
-- Run: `python3 pusher_mechanism.py`
+### 1. Validate Design
+Checks geometric constraints (e.g., shaft fit) and mechanical feasibility (torque).
+```bash
+python3 validate_design.py
+```
 
-### 5. `gearbox_assembly.py`
-Generates the gearbox assembly.
-- **Output Shaft:** 25mm Hex (configurable).
-- Includes housing, input/output shafts, and impact drive.
-- Run: `python3 gearbox_assembly.py`
-- Output: `shredder_gearbox_assembly.step`
+### 2. Simulate Stress
+Runs a Finite Element Analysis (FEA) or analytical simulation to calculate shaft stress and safety factors.
+```bash
+python3 simulate_stress.py
+```
 
-### 6. `full_machine_assembly.py`
-Generates the complete machine model.
-- Combines Gearbox, Helical Drum Stack (10 disks), Fixed Knife, and Pusher.
-- Run: `python3 full_machine_assembly.py`
+### 3. Optimize Design (Agent)
+An intelligent agent that iteratively tweaks parameters (Gear Ratio, Shaft Size, Drum Diameter) to maximize throughput while satisfying safety constraints.
+```bash
+python3 optimize_design.py
+```
+This will generate `parameters/optimized_shredder_config.json`.
+
+## Generating Models
+
+The generation scripts automatically load `parameters/optimized_shredder_config.json` if it exists, otherwise they use `parameters/shredder_config.json`.
+
+### Full Assembly
+Generates the complete machine model (Gearbox + Shredder + Pusher).
+```bash
+python3 full_machine_assembly.py
+```
 - Output: `open_shredder_full_assembly.step`
 
+### Individual Components
+
+- **Gearbox:** `python3 gearbox_assembly.py` -> `shredder_gearbox_assembly.step`
+- **Shredder Parts:** `python3 shredder_components.py`
+- **Pusher:** `python3 pusher_mechanism.py`
+
+## Scripts Overview
+
+- `parameters/shredder_config.py`: Configuration schema.
+- `validate_design.py`: Validation logic.
+- `simulate_stress.py`: FEA/Analytical simulation logic.
+- `optimize_design.py`: Optimization agent.
+- `cycloidal_gear.py`: Generates the core cycloidal disk.
+- `impact_drive.py`: Generates the slip-disk and impact hammer mechanism.
+- `shredder_components.py`: Generates internal shredder parts.
+- `gearbox_assembly.py`: Generates gearbox assembly.
+- `full_machine_assembly.py`: Generates full machine assembly.
+
 ## Configuration
-Adjust parameters in the respective python files (e.g., `drum_disk` diameter in `shredder_components.py` or `ratio` in `gearbox_assembly.py`).
+Adjust parameters in `parameters/shredder_config.json` manually or use `optimize_design.py`.

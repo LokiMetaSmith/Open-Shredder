@@ -1,50 +1,52 @@
-from build123d import *
 import math
+import sys
+import os
+
+try:
+    from parameters.shredder_config import ShredderSystemConfig, default_config
+except ImportError:
+    # Add parameters directory to sys.path if running as script
+    sys.path.append(os.path.join(os.path.dirname(__file__), 'parameters'))
+    from shredder_config import ShredderSystemConfig, default_config
+
+from build123d import *
 from gearbox_assembly import gearbox_assembly
 from shredder_components import drum_disk, fixed_knife
 from pusher_mechanism import pusher_mechanism
 
-def full_machine_assembly():
+def full_machine_assembly(config: ShredderSystemConfig):
     """
-    Assembles the Gearbox, Shredder Drum, Fixed Knife, and Pusher.
+    Assembles the Gearbox, Shredder Drum, Fixed Knife, and Pusher using configuration.
     """
+    motor_conf = config.motor
+    gearbox_conf = config.gearbox
+    shredder_conf = config.shredder
 
     # 1. Gearbox
     # (Includes Housing, Input Shaft, Output Hex Shaft, Impact Drive)
-    # Using NEMA 34 Stepper Motor for high torque and home use
-    gearbox = gearbox_assembly(ratio=10.0, motor_type="NEMA34", use_impact_drive=True)
-
-    # Extract the output shaft location relative to the gearbox?
-    # The gearbox output shaft was generated at (0,0,10) in the sub-assembly.
-    # It extends 100mm.
+    gearbox = gearbox_assembly(config)
 
     # 2. Shredder Drum
-    # Stack of disks.
-    # Length 254mm. Disk thickness ~25.4mm => 10 disks.
-    num_disks = 10
-    disk_thickness = 25.4
+    num_disks = shredder_conf.num_disks
+    disk_thickness = shredder_conf.disk_thickness_mm
+    num_teeth = shredder_conf.num_teeth_per_disk
 
     drum_parts = []
 
-    # We want a helical pattern.
-    # Each disk has 2 teeth.
-    # Total twist? 180 degrees? Or 360?
-    # Let's offset each disk by 360 / (num_disks * num_teeth) ?
-    # 360 / 20 = 18 degrees per step.
+    # Helical pattern calculation
+    angle_step = 360.0 / (num_disks * num_teeth)
 
-    angle_step = 360.0 / (num_disks * 2)
+    # Create one master disk to copy
+    # Note: drum_disk now takes the config object
+    master_disk_shape = drum_disk(config)
 
-    # Create one master disk to copy?
-    master_disk_shape = drum_disk(thickness=disk_thickness, hex_shaft_size=25.0, num_teeth=2)
+    # Position drum above gearbox
+    # Gearbox height usually ~40-60mm housing + output shaft.
+    # We need to position it where the shaft starts effectively.
+    # Gearbox output shaft starts at Z=10 roughly in the sub-assembly.
+    # Let's assume some clearance.
 
-    # We need to position the drum ON the shaft.
-    # Gearbox is at origin?
-    # Let's say Gearbox is at Z=0 to Z=50. Output shaft sticks up to Z=150.
-    # Wait, the gearbox script made the shaft 100mm long. We need 254mm + extra.
-    # We might need to extend the shaft here or modify the gearbox script to be parametric on shaft length.
-    # For now, let's just place the drum "above" the gearbox and assume the shaft continues (visual assembly).
-
-    drum_start_z = 60.0 # Clear the gearbox housing
+    drum_start_z = gearbox_conf.housing_height_mm + 20.0
 
     for i in range(num_disks):
         z_pos = drum_start_z + (i * disk_thickness)
@@ -56,51 +58,51 @@ def full_machine_assembly():
 
     # 3. Fixed Knife
     # Positioned next to the drum.
-    # Drum Radius = 75mm.
-    # Knife should be at X = 75 + clearance?
-    # Or usually, the knife interlocks.
-    knife_shape = fixed_knife(length=254.0, drum_diameter=150.0)
+    drum_diameter = shredder_conf.drum_diameter_mm
+    knife_clearance = shredder_conf.fixed_knife_clearance_mm
+
+    # Knife shape
+    knife_shape = fixed_knife(config)
 
     # Center the knife along the drum length
-    drum_center_z = drum_start_z + (254.0 / 2)
-    knife_loc = Location((80, 0, drum_center_z)) # X=80 (just outside 75 radius), Centered Z
+    total_drum_length = num_disks * disk_thickness
+    drum_center_z = drum_start_z + (total_drum_length / 2)
 
-    knife_part = knife_shape.move(knife_loc) # Knife was created centered?
-    # fixed_knife() -> Box(length, width, thickness). Box is centered at 0,0,0.
-    # Length is X dimension? No, Box(length, width, thickness). usually X, Y, Z.
-    # Let's check fixed_knife implementation: Box(length, width, thickness).
-    # So X=254. We want Length along Z axis.
-    # So we need to rotate the knife.
+    # Knife X position: Radius + Clearance + (Thickness/2 ?)
+    # Usually knife face is at Radius + Clearance.
+    # fixed_knife returns a Box(length, width, thickness).
+    # Box is centered at origin.
+    # Length (from fixed_knife implementation) is the long dimension (along Drum Axis).
+    # Width is usually the depth away from drum?
+    # Thickness is the vertical dimension?
+    # Let's check fixed_knife implementation again in my head:
+    # Box(length, width, thickness).
+    # Length = drum_length (Z axis effectively after rotation).
+    # Width = 50.
+    # Thickness = 20.
+
+    # We rotate it 90 deg Y axis.
+    # Before rotation: X=Length, Y=Width, Z=Thickness.
+    # After 90 deg Y: X=Thickness, Y=Width, Z=-Length (or similar).
+    # We want the "Length" to be along Z.
+    # We want the "Face" (Width or Thickness) to face the drum.
+
+    # Let's just trust visual alignment for now or precise math:
+    # If we rotate 90 Y: The X axis becomes Z axis.
+    # So "Length" aligns with Z.
+
+    knife_x_pos = (drum_diameter / 2) + knife_clearance + 10 # +10 for half thickness of knife (assuming 20mm thick)
+    knife_loc = Location((knife_x_pos, 0, drum_center_z))
 
     knife_part = knife_shape.rotate(Axis.Y, 90).move(knife_loc)
 
     # 4. Pusher
-    # Above the drum?
-    # Usually pushing down into the nip.
-    # If the knife is at X+, the nip is maybe at Top?
-    # Let's put the pusher above the drum (Z+ is shaft axis?).
-    # Wait, single shaft shredders usually have a horizontal shaft.
-    # Our generated gearbox has Z as the shaft axis.
-    # So the machine is "Vertical" (like a blender) currently.
-    # Most industrial shredders are horizontal.
-    # Let's Rotate the whole Gearbox+Drum to be Horizontal for the final assembly?
-    # Or just leave it vertical for the model.
-    # Let's leave it vertical (Z-axis shaft) as it's easier given the current coordinates.
-    # So "Pusher" pushes radially inwards? Or axially?
-    # Single Shaft Shredder (Horizontal Shaft): Pusher pushes horizontally towards the drum.
-    # Vertical Shaft Shredder: Gravity fed? Or pusher pushes from side?
-    # Let's assume standard Horizontal layout.
-    # So we should Rotate everything.
+    # Simplified pusher placeholder
+    pusher_shape = pusher_mechanism(config)
 
-    # Let's keep Z-axis for generating, but the "Pusher" is actually a "Ram" on the side.
-    # If Knife is at X=80, Pusher might be at X=-80?
-    # Or Y axis?
-    pusher_shape = pusher_mechanism(width=250.0, depth=140.0)
-    # Pusher is Box(width, depth, thickness).
-    # We want it to push towards the drum.
-    # Let's place it at Y = -100.
+    # Position at Y negative
     pusher_loc = Location((0, -120, drum_center_z))
-    pusher_part = pusher_shape.rotate(Axis.X, 90).move(pusher_loc) # Rotate to face drum
+    pusher_part = pusher_shape.rotate(Axis.X, 90).move(pusher_loc)
 
     # Combine Everything
     full_assembly = Compound(children=[
@@ -113,7 +115,22 @@ def full_machine_assembly():
     return full_assembly
 
 if __name__ == "__main__":
-    print("Generating Full Machine Assembly...")
-    asm = full_machine_assembly()
+    print("Generating Full Machine Assembly from Config...")
+
+    # Prioritize optimized config
+    optimized_path = os.path.join(os.path.dirname(__file__), 'parameters', 'optimized_shredder_config.json')
+    default_path = os.path.join(os.path.dirname(__file__), 'parameters', 'shredder_config.json')
+
+    if os.path.exists(optimized_path):
+        print(f"Loading optimized config from {optimized_path}")
+        cfg = ShredderSystemConfig.load_from_json(optimized_path)
+    elif os.path.exists(default_path):
+        print(f"Loading config from {default_path}")
+        cfg = ShredderSystemConfig.load_from_json(default_path)
+    else:
+        print("Using default config")
+        cfg = default_config
+
+    asm = full_machine_assembly(cfg)
     export_step(asm, "open_shredder_full_assembly.step")
     print("Saved open_shredder_full_assembly.step")
