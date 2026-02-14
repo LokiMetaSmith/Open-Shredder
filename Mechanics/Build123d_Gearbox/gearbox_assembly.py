@@ -21,6 +21,7 @@ def gearbox_assembly(config: ShredderSystemConfig):
     # Extract config sections for convenience
     motor_conf = config.motor
     gearbox_conf = config.gearbox
+    bearing_conf = config.bearing
 
     # 1. Generate Cycloidal Components
     disk = cycloidal_disk(
@@ -62,6 +63,12 @@ def gearbox_assembly(config: ShredderSystemConfig):
                 with PolarLocations(radius=mount_spacing/2, count=mount_count):
                     Cylinder(radius=hole_radius, height=10, mode=Mode.SUBTRACT)
 
+        # Bearing Pocket (Top Face)
+        # Positioned at the top face (Z = +housing_height/2)
+        pocket_center_z = housing_height/2 - bearing_conf.width_mm/2
+        with Locations((0,0, pocket_center_z)):
+             Cylinder(radius=bearing_conf.outer_diameter_mm/2, height=bearing_conf.width_mm, mode=Mode.SUBTRACT)
+
     # 4. Shafts
     output_shaft_hex = gearbox_conf.output_shaft_hex_mm
 
@@ -70,30 +77,31 @@ def gearbox_assembly(config: ShredderSystemConfig):
 
     with BuildPart() as output_shaft:
         # Hex Shaft
-        hex_radius = output_shaft_hex / math.sqrt(3) # Side to Radius conversion?
-        # RegularPolygon radius is circumradius.
-        # Hex "Size" usually means flat-to-flat (W).
-        # Circumradius R = W / sqrt(3) * 2 ? No.
-        # W = 2 * r_inscribed = 2 * (R * cos(30)) = 2 * R * sqrt(3)/2 = R * sqrt(3).
-        # So R = W / sqrt(3).
-        # If output_shaft_hex is Flat-to-Flat (25mm), then R = 25 / 1.732 = 14.43.
-
-        circum_radius = output_shaft_hex / math.sqrt(3) # Wait, is it?
-        # Check: 25mm hex key. Flat to flat is 25.
-        # Distance from center to flat is 12.5.
-        # Distance from center to corner (R) is 12.5 / cos(30) = 12.5 / (sqrt(3)/2) = 25 / sqrt(3).
-        # Yes.
-
+        circum_radius = output_shaft_hex / math.sqrt(3)
         with BuildSketch():
             RegularPolygon(radius=circum_radius, side_count=6)
         extrude(amount=gearbox_conf.output_shaft_length_mm)
 
+        # Bearing Journal
+        # Aligned with the bearing pocket when shaft is at (0,0,0)
+        # Pocket Z center relative to housing center is `pocket_center_z`
+        with Locations((0,0, pocket_center_z)):
+             Cylinder(radius=bearing_conf.inner_diameter_mm/2, height=bearing_conf.width_mm)
+
     # 5. Assembly List
+    # Visualization Bearing
+    # Using Cylinder with hole (Tube)
+    # Tube(od, id, height)
+    with BuildPart() as bearing_vis:
+         Cylinder(radius=bearing_conf.outer_diameter_mm/2, height=bearing_conf.width_mm)
+         Cylinder(radius=bearing_conf.inner_diameter_mm/2, height=bearing_conf.width_mm, mode=Mode.SUBTRACT)
+
     parts_list = [
         housing.part,
         disk.move(Location((0,0,5))), # Shift disk up
         input_shaft.part.move(Location((0,0,-10))),
-        output_shaft.part.move(Location((0,0,10)))
+        output_shaft.part, # Located at (0,0,0) to align with housing
+        bearing_vis.part.move(Location((0,0, pocket_center_z)))
     ]
 
     # 6. Impact Drive (Optional)
