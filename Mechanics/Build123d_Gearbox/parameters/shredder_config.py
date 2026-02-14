@@ -40,18 +40,27 @@ class MaterialProperties:
     density_kg_m3: float = 7850.0 # Steel
 
 @dataclass
+class BearingConfig:
+    series: str = "6006"
+    inner_diameter_mm: float = 30.0
+    outer_diameter_mm: float = 55.0
+    width_mm: float = 13.0
+
+@dataclass
 class ShredderSystemConfig:
     motor: MotorConfig = field(default_factory=MotorConfig)
     gearbox: GearboxConfig = field(default_factory=GearboxConfig)
     shredder: ShredderConfig = field(default_factory=ShredderConfig)
     material: MaterialProperties = field(default_factory=MaterialProperties)
+    bearing: BearingConfig = field(default_factory=BearingConfig)
 
     def save_to_json(self, filepath: str):
         data = {
             "motor": self.motor.__dict__,
             "gearbox": self.gearbox.__dict__,
             "shredder": self.shredder.__dict__,
-            "material": self.material.__dict__
+            "material": self.material.__dict__,
+            "bearing": self.bearing.__dict__
         }
         with open(filepath, 'w') as f:
             json.dump(data, f, indent=4)
@@ -67,6 +76,7 @@ class ShredderSystemConfig:
         if "gearbox" in data: config.gearbox = GearboxConfig(**data["gearbox"])
         if "shredder" in data: config.shredder = ShredderConfig(**data["shredder"])
         if "material" in data: config.material = MaterialProperties(**data["material"])
+        if "bearing" in data: config.bearing = BearingConfig(**data["bearing"])
 
         return config
 
