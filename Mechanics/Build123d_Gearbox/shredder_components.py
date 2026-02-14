@@ -1,4 +1,14 @@
 import math
+import sys
+import os
+
+try:
+    from parameters.shredder_config import ShredderSystemConfig, default_config
+except ImportError:
+    # Add parameters directory to sys.path if running as script
+    sys.path.append(os.path.join(os.path.dirname(__file__), 'parameters'))
+    from shredder_config import ShredderSystemConfig, default_config
+
 from build123d import *
 
 # =============================================================================
@@ -21,11 +31,6 @@ def carbide_insert_ccmt060204():
     # Create the Diamond Profile
     # Side length ~ 6.35mm
     # Angle 80 deg.
-    # We can model this as a Polygon or build it from lines.
-
-    # SCAD logic:
-    # linear_extrude(height=2.38, scale=...) of a square with minkowski...
-    # Let's simplify: 80-degree rhombus with rounded corners.
 
     side_len = 6.35
     angle = 80
@@ -35,66 +40,6 @@ def carbide_insert_ccmt060204():
             # Create a Rhombus/Diamond
             # Using RegularPolygon doesn't give 80deg easily.
             # Let's draw a trapezoid/rhombus manually.
-
-            # Half-angles: 40 deg and 50 deg? No, 80 and 100.
-            # 80 deg corner.
-
-            # Coordinates for a rhombus with 80 deg angle at origin (or centered)
-            # Let's Center it.
-
-            # Width/Height calc
-            # If side=6.35, angle=80.
-            # We can use RegularPolygon(side_count=4) and scale non-uniformly? No, that changes lengths.
-
-            # Let's use points.
-            #   P1
-            #  /  \
-            # P0--P2
-            #  \  /
-            #   P3
-
-            # Actually, standard ISO inserts (CCMT) are defined by inscribed circle (IC).
-            # C = 80 deg Rhombic.
-            # C06 -> IC = 6.35mm (1/4") ?
-            # Wait, 06 refers to edge length usually for C-shape.
-            # Let's stick to the SCAD approximation:
-            # Square (rotated) + Minkowski circle.
-
-            # SCAD: square(size=6.35-0.4) ... minkowski circle(r=0.4)
-            # This results in a square with rounded corners.
-            # WAIT. CCMT is a DIAMOND (Rhombus). SCAD file says "C - 80deg diamond shape" but uses `square()`?
-            # `linear_extrude(scale=...)` with `translate([2.35*tan(7), 0, 0])` suggests it's making the relief angle (7 deg)
-            # But `square` implies 90 degrees.
-            # CCMT is indeed a Diamond. The SCAD might be using a transformation or I am misreading it.
-            # "square(size=6.35-0.4)" -> This makes a rounded square (CNMG style? No C is diamond).
-            # C-shape insert is 80-degree rhombus.
-            # Maybe the SCAD is an approximation or for a generic square insert?
-            # "C - 80deg diamond shape" comment vs `square()` code.
-            # I will trust the "CCMT" designation (Diamond) over the possibly buggy SCAD code if they conflict.
-            # I will build a proper 80-degree Rhombus.
-
-            # Points for 80-deg Rhombus
-            # Center at 0,0
-            # Diagonals align with X/Y.
-            # angle/2 = 40 deg.
-            # hypotenuse = side_len = 6.35
-            # x = 6.35 * cos(40)
-            # y = 6.35 * sin(40)
-            # Wait, no.
-
-            # Let's use `RegularPolygon(4)` (Square) and `scale` Y?
-            # A square has diagonals equal.
-            # A rhombus has diagonals D1, D2.
-            # tan(40) = (D2/2) / (D1/2) = D2/D1.
-            # So if we scale Y by tan(40) ~ 0.839 relative to X?
-            # Square rotated 45 deg has diagonals on axes.
-
-            with Locations((0,0)):
-                RegularPolygon(radius=6.35/math.sqrt(2), side_count=4) # Square with side ~6.35
-                # Rotate to align diagonals with axes? RegularPolygon(4) is already aligned?
-                # RegularPolygon(4) is a square with flat sides up/down usually? Or corners?
-                # Build123d RegularPolygon(4) usually has a flat on bottom?
-                # Let's just create points.
 
             # 80 deg rhombus.
             # Side = 6.35.
@@ -108,7 +53,7 @@ def carbide_insert_ccmt060204():
                 (-4.86, 0),
                 (0, -4.08)
             ]
-            with BuildLine():
+            with BuildLine() as l:
                 Polyline(pts, close=True)
             make_face()
             fillet(profile.vertices(), radius=0.4)
@@ -130,15 +75,17 @@ def carbide_insert_ccmt060204():
 # =============================================================================
 # 2. Shredder Drum Disk
 # =============================================================================
-def drum_disk(
-    diameter=150.0,
-    thickness=25.0, # 254mm / 10 disks ~ 25.4mm
-    hex_shaft_size=25.0, # Flat-to-Flat
-    num_teeth=2
-):
+def drum_disk(config: ShredderSystemConfig):
     """
-    Generates a single slice of the shredder drum.
+    Generates a single slice of the shredder drum using configuration.
     """
+    shredder_conf = config.shredder
+
+    diameter = shredder_conf.drum_diameter_mm
+    thickness = shredder_conf.disk_thickness_mm
+    hex_shaft_size = shredder_conf.hex_bore_mm
+    num_teeth = shredder_conf.num_teeth_per_disk
+
     with BuildPart() as disk:
         Cylinder(radius=diameter/2, height=thickness)
 
@@ -195,17 +142,19 @@ def drum_disk(
 # =============================================================================
 # 3. Fixed Knife (Counter Blade)
 # =============================================================================
-def fixed_knife(
-    length=254.0,
-    drum_diameter=150.0,
-    width=50.0,
-    thickness=20.0
-):
+def fixed_knife(config: ShredderSystemConfig):
     """
     A simple rectangular bar with a profile matching the drum?
     Usually it's a comb shape.
     For this demo, we'll make a simple bar.
     """
+    shredder_conf = config.shredder
+
+    length = shredder_conf.drum_length_mm
+    drum_diameter = shredder_conf.drum_diameter_mm
+    width = 50.0 # Could be parameterized
+    thickness = 20.0 # Could be parameterized
+
     with BuildPart() as knife:
         Box(length, width, thickness)
 
@@ -219,18 +168,27 @@ def fixed_knife(
     return knife.part
 
 if __name__ == "__main__":
-    print("Generating Shredder Components...")
+    print("Generating Shredder Components from Config...")
 
-    # 1. Insert
+    # Load config or use default
+    config_path = os.path.join(os.path.dirname(__file__), 'parameters', 'shredder_config.json')
+    if os.path.exists(config_path):
+        print(f"Loading config from {config_path}")
+        cfg = ShredderSystemConfig.load_from_json(config_path)
+    else:
+        print("Using default config")
+        cfg = default_config
+
+    # 1. Insert (Standard part, no config needed usually)
     ins = carbide_insert_ccmt060204()
     export_step(ins, "carbide_insert.step")
 
     # 2. Drum Disk
-    disk = drum_disk()
+    disk = drum_disk(cfg)
     export_step(disk, "shredder_drum_disk.step")
 
     # 3. Fixed Knife
-    knife = fixed_knife()
+    knife = fixed_knife(cfg)
     export_step(knife, "fixed_knife.step")
 
     print("Saved components.")
