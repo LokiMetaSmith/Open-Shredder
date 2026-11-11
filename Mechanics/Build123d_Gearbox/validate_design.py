@@ -138,17 +138,30 @@ def validate_config(config: ShredderSystemConfig, verbose=True):
     return valid, validator.errors, validator.warnings
 
 if __name__ == "__main__":
-    # Load optimized or default
-    optimized_path = os.path.join(os.path.dirname(__file__), 'parameters', 'optimized_shredder_config.json')
-    default_path = os.path.join(os.path.dirname(__file__), 'parameters', 'shredder_config.json')
+    import argparse
+    parser = argparse.ArgumentParser(description="Validate mechanical and geometric parameters of OpenShredder.")
+    parser.add_argument("--config", type=str, default=None, help="Path to config JSON file")
+    parser.add_argument("--quiet", action="store_true", help="Quiet output (only set exit code)")
+    args = parser.parse_args()
 
-    if os.path.exists(optimized_path):
-        print(f"Loading optimized config from {optimized_path}")
-        cfg = ShredderSystemConfig.load_from_json(optimized_path)
-    elif os.path.exists(default_path):
-        print(f"Loading config from {default_path}")
-        cfg = ShredderSystemConfig.load_from_json(default_path)
+    if args.config and os.path.exists(args.config):
+        cfg_path = args.config
+    else:
+        optimized_path = os.path.join(os.path.dirname(__file__), 'parameters', 'optimized_shredder_config.json')
+        default_path = os.path.join(os.path.dirname(__file__), 'parameters', 'shredder_config.json')
+        if os.path.exists(optimized_path):
+            cfg_path = optimized_path
+        elif os.path.exists(default_path):
+            cfg_path = default_path
+        else:
+            cfg_path = None
+
+    if cfg_path:
+        if not args.quiet:
+            print(f"Loading config from {cfg_path}")
+        cfg = ShredderSystemConfig.load_from_json(cfg_path)
     else:
         cfg = default_config
 
-    validate_config(cfg)
+    valid, errors, warnings = validate_config(cfg, verbose=not args.quiet)
+    sys.exit(0 if valid else 1)

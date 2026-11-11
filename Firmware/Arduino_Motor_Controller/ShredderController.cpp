@@ -19,6 +19,7 @@ ShredderController::ShredderController(MotorInterface* motor) {
     _config.reverseDuration = 2000;
     _config.useImpactMode = false;
     _config.impactBackoffDuration = 1000;
+    _config.maxJamRetries = 3;
 }
 
 void ShredderController::setConfig(ShredderConfig config) {
@@ -36,6 +37,14 @@ void ShredderController::start() {
 void ShredderController::stop() {
     _state = STATE_IDLE;
     _motor->stop();
+}
+
+void ShredderController::resetFault() {
+    if (_state == STATE_FAULTED) {
+        _state = STATE_IDLE;
+        _jamCount = 0;
+        _motor->stop();
+    }
 }
 
 void ShredderController::update() {
@@ -70,7 +79,11 @@ void ShredderController::update() {
         case STATE_JAM_DETECTED:
             // Pause briefly before reversing to protect electronics
             if (now - _stateStartTime > 500) {
-                if (_config.useImpactMode) {
+                if (_config.maxJamRetries > 0 && _jamCount >= _config.maxJamRetries) {
+                    // Exceeded max allowable jam retries; enter terminal fault state
+                    _state = STATE_FAULTED;
+                    _motor->stop();
+                } else if (_config.useImpactMode) {
                     // Impact Strategy: Back up, then strike
                     _state = STATE_IMPACT_PREP_BACKOFF;
                     _motor->setSpeed(-_config.reverseSpeed);
@@ -114,6 +127,11 @@ void ShredderController::update() {
 
         case STATE_PAUSED:
             // Placeholder
+            break;
+
+        case STATE_FAULTED:
+            // Terminal fault state - keep motor stopped until explicitly cleared
+            _motor->stop();
             break;
     }
 }

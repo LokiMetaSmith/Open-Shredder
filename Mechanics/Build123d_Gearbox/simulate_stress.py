@@ -46,19 +46,6 @@ class StressSimulator:
         if HAS_SKFEM:
             try:
                 max_stress_normalized = self._solve_fem_torsion(R)
-                # Prandtl stress function u satisfies div(grad(u)) = -2G*theta
-                # Stress components: tau_xz = dphi/dy, tau_yz = -dphi/dx
-                # Torque T = 2 * Integral(u) dA
-                # We solved -div(grad(u)) = 2 (Normalized)
-                # Let's say we solved for u_norm.
-                # T_norm = 2 * Integral(u_norm) dA
-                # Scaling factor: T_actual / T_norm.
-                # Stress_actual = Stress_norm * (T_actual / T_norm)
-
-                # Wait, the scaling is linear.
-                # max_shear_stress = (Max_Grad_u_norm / T_norm) * Torque_actual?
-                # Yes.
-
                 max_shear_stress = max_stress_normalized * torque
 
                 if verbose:
@@ -81,6 +68,74 @@ class StressSimulator:
             "max_shear_stress_mpa": max_shear_stress / 1e6,
             "safety_factor": safety_factor,
             "torque_nm": torque
+        }
+
+    def simulate_combined_stress(self, verbose=False):
+        """
+        Simulates combined torsion and bending stress on the output shaft.
+        Bending moment arises from transverse cutting force applied at mid-span
+        along the shredder drum between support bearings.
+        Computes maximum shear stress (torsion), normal bending stress,
+        and equivalent Von Mises stress.
+        """
+        motor = self.config.motor
+        gearbox = self.config.gearbox
+        shredder = self.config.shredder
+        material = self.config.material
+
+        # 1. Torsion calculation
+        torsion_res = self.simulate_torsion(verbose=False)
+        tau = torsion_res["max_shear_stress_mpa"] * 1e6 # Pa
+        torque = torsion_res["torque_nm"]
+
+        # 2. Bending Force Calculation
+        # Transverse force at drum perimeter: F_tangential = Torque / drum_radius
+        drum_radius_m = (shredder.drum_diameter_mm / 2.0) / 1000.0
+        if drum_radius_m > 0:
+            cutting_force_n = torque / drum_radius_m
+        else:
+            cutting_force_n = 0.0
+
+        # Drum span (L): distance between shaft supports/bearings
+        span_m = (shredder.num_disks * shredder.disk_thickness_mm) / 1000.0
+        # Peak bending moment for a simply supported beam with central point load: M = (F * L) / 4
+        bending_moment_nm = (cutting_force_n * span_m) / 4.0
+
+        # 3. Section Modulus for Hexagon in Bending
+        # For regular hexagon with flat-to-flat s (inscribed diameter d = s):
+        # Elastic section modulus Z_b:
+        # Exact for regular hexagon flat-to-flat s: Z_b = 5 * sqrt(3) / 72 * s^3 ~ 0.12028 * s^3
+        # Inscribed circle approximation: Z_b = pi * d^3 / 32 ~ 0.09817 * s^3
+        s_m = gearbox.output_shaft_hex_mm / 1000.0
+        Z_bending = (5.0 * math.sqrt(3) / 72.0) * (s_m ** 3)
+
+        sigma_bending = bending_moment_nm / Z_bending if Z_bending > 0 else 0.0
+
+        # 4. Equivalent Von Mises Stress:
+        # sigma_vm = sqrt(sigma_bending^2 + 3 * tau^2)
+        von_mises_stress = math.sqrt(sigma_bending**2 + 3.0 * (tau**2))
+
+        # 5. Combined Safety Factor against shaft yield strength
+        yield_strength = material.shaft_yield_strength_mpa * 1e6 # Pa
+        safety_factor = yield_strength / von_mises_stress if von_mises_stress > 0 else 999.0
+
+        if verbose:
+            print(f"Torque: {torque:.2f} Nm")
+            print(f"Transverse Cutting Force: {cutting_force_n:.2f} N")
+            print(f"Peak Bending Moment: {bending_moment_nm:.2f} Nm")
+            print(f"Max Shear Stress (Torsion): {tau / 1e6:.2f} MPa")
+            print(f"Max Bending Stress: {sigma_bending / 1e6:.2f} MPa")
+            print(f"Von Mises Stress: {von_mises_stress / 1e6:.2f} MPa")
+            print(f"Combined Safety Factor: {safety_factor:.2f}")
+
+        return {
+            "torque_nm": torque,
+            "cutting_force_n": cutting_force_n,
+            "bending_moment_nm": bending_moment_nm,
+            "max_shear_stress_mpa": tau / 1e6,
+            "max_bending_stress_mpa": sigma_bending / 1e6,
+            "von_mises_stress_mpa": von_mises_stress / 1e6,
+            "safety_factor": safety_factor
         }
 
     def _analytical_torsion(self, s, T):
@@ -228,25 +283,38 @@ class StressSimulator:
         return max_grad / T_norm
 
 if __name__ == "__main__":
-    print("Running Stress Simulation...")
+    import argparse
+    parser = argparse.ArgumentParser(description="Output shaft stress simulation (torsion + bending)")
+    parser.add_argument("--config", type=str, default=None, help="Path to config JSON")
+    parser.add_argument("--torsion-only", action="store_true", help="Only run pure torsion simulation")
+    args = parser.parse_args()
 
-    # Load optimized or default
-    optimized_path = os.path.join(os.path.dirname(__file__), 'parameters', 'optimized_shredder_config.json')
-    default_path = os.path.join(os.path.dirname(__file__), 'parameters', 'shredder_config.json')
+    # Load optimized, custom, or default
+    if args.config and os.path.exists(args.config):
+        cfg_path = args.config
+    else:
+        optimized_path = os.path.join(os.path.dirname(__file__), 'parameters', 'optimized_shredder_config.json')
+        default_path = os.path.join(os.path.dirname(__file__), 'parameters', 'shredder_config.json')
+        if os.path.exists(optimized_path):
+            cfg_path = optimized_path
+        elif os.path.exists(default_path):
+            cfg_path = default_path
+        else:
+            cfg_path = None
 
-    if os.path.exists(optimized_path):
-        print(f"Loading optimized config from {optimized_path}")
-        cfg = ShredderSystemConfig.load_from_json(optimized_path)
-    elif os.path.exists(default_path):
-        print(f"Loading config from {default_path}")
-        cfg = ShredderSystemConfig.load_from_json(default_path)
+    if cfg_path:
+        print(f"Loading config from {cfg_path}")
+        cfg = ShredderSystemConfig.load_from_json(cfg_path)
     else:
         cfg = default_config
 
     sim = StressSimulator(cfg)
-    results = sim.simulate_torsion(verbose=True)
-
-    print("\n--- Simulation Report ---")
-    print(f"Torque Load: {results['torque_nm']:.2f} Nm")
-    print(f"Max Shear Stress: {results['max_shear_stress_mpa']:.2f} MPa")
-    print(f"Safety Factor: {results['safety_factor']:.2f}")
+    print("\n--- Stress Simulation Report ---")
+    if args.torsion_only:
+        results = sim.simulate_torsion(verbose=True)
+        print(f"Torque Load: {results['torque_nm']:.2f} Nm")
+        print(f"Max Shear Stress: {results['max_shear_stress_mpa']:.2f} MPa")
+        print(f"Safety Factor: {results['safety_factor']:.2f}")
+    else:
+        results = sim.simulate_combined_stress(verbose=True)
+    print("--------------------------------\n")
