@@ -64,14 +64,11 @@ void loop() {
     if (controller) {
         controller->update();
 
-        // Optional: Print Status periodically
+        // Output real-time telemetry periodically
         static unsigned long lastPrint = 0;
-        if (millis() - lastPrint > 1000) {
+        if (millis() - lastPrint > 500) {
             lastPrint = millis();
-            Serial.print("State: ");
-            Serial.print(controller->getState());
-            Serial.print(" Load: ");
-            Serial.println(driver->getLoad());
+            controller->printTelemetry();
         }
     }
 }

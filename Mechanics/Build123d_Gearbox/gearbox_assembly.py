@@ -47,6 +47,8 @@ def gearbox_assembly(config: ShredderSystemConfig):
 
     # 3. Housing
     housing_height = gearbox_conf.housing_height_mm
+    fastener_conf = config.fasteners
+    bearing_tol = bearing_conf.recess_tolerance_mm
 
     with BuildPart() as housing:
         Cylinder(radius=housing_od/2, height=housing_height)
@@ -54,20 +56,26 @@ def gearbox_assembly(config: ShredderSystemConfig):
             Cylinder(radius=inner_cavity_dia/2, height=housing_height-5, mode=Mode.SUBTRACT) # Inner cavity
 
         # Motor Mount Holes
-        hole_radius = 6.5 / 2 if motor_conf.type in ["NEMA34", "WIPER"] else 5.5 / 2
+        motor_hole_radius = fastener_conf.motor_mount_screw_dia_mm / 2.0
         with Locations((0,0, -housing_height/2)):
             if mount_style == "GRID":
                 with GridLocations(mount_spacing, mount_spacing, 2, 2):
-                    Cylinder(radius=hole_radius, height=10, mode=Mode.SUBTRACT)
+                    Cylinder(radius=motor_hole_radius, height=10, mode=Mode.SUBTRACT)
             elif mount_style == "POLAR":
                 with PolarLocations(radius=mount_spacing/2, count=mount_count):
-                    Cylinder(radius=hole_radius, height=10, mode=Mode.SUBTRACT)
+                    Cylinder(radius=motor_hole_radius, height=10, mode=Mode.SUBTRACT)
 
-        # Bearing Pocket (Top Face)
-        # Positioned at the top face (Z = +housing_height/2)
+        # Housing Assembly Bolt Holes
+        housing_bolt_radius = fastener_conf.housing_bolt_dia_mm / 2.0
+        with Locations((0,0, 0)):
+            with PolarLocations(radius=fastener_conf.housing_bolt_circle_mm/2, count=fastener_conf.housing_bolt_count):
+                Cylinder(radius=housing_bolt_radius, height=housing_height+2, mode=Mode.SUBTRACT)
+
+        # Bearing Pocket (Top Face with fit tolerance)
+        pocket_radius = (bearing_conf.outer_diameter_mm + bearing_tol) / 2.0
         pocket_center_z = housing_height/2 - bearing_conf.width_mm/2
         with Locations((0,0, pocket_center_z)):
-             Cylinder(radius=bearing_conf.outer_diameter_mm/2, height=bearing_conf.width_mm, mode=Mode.SUBTRACT)
+             Cylinder(radius=pocket_radius, height=bearing_conf.width_mm, mode=Mode.SUBTRACT)
 
     # 4. Shafts
     output_shaft_hex = gearbox_conf.output_shaft_hex_mm
@@ -90,18 +98,30 @@ def gearbox_assembly(config: ShredderSystemConfig):
 
     # 5. Assembly List
     # Visualization Bearing
-    # Using Cylinder with hole (Tube)
-    # Tube(od, id, height)
     with BuildPart() as bearing_vis:
          Cylinder(radius=bearing_conf.outer_diameter_mm/2, height=bearing_conf.width_mm)
          Cylinder(radius=bearing_conf.inner_diameter_mm/2, height=bearing_conf.width_mm, mode=Mode.SUBTRACT)
+
+    # Visualization Fasteners (Housing Bolts)
+    bolt_parts = []
+    for i in range(fastener_conf.housing_bolt_count):
+        theta = (2.0 * math.pi * i) / fastener_conf.housing_bolt_count
+        bx = (fastener_conf.housing_bolt_circle_mm / 2.0) * math.cos(theta)
+        by = (fastener_conf.housing_bolt_circle_mm / 2.0) * math.sin(theta)
+        with BuildPart() as b:
+            with Locations((bx, by, 0)):
+                Cylinder(radius=fastener_conf.housing_bolt_dia_mm/2, height=housing_height)
+                with Locations((0, 0, housing_height/2 + 2)):
+                    Cylinder(radius=fastener_conf.housing_bolt_dia_mm, height=4) # Bolt head
+        bolt_parts.append(b.part)
 
     parts_list = [
         housing.part,
         disk.move(Location((0,0,5))), # Shift disk up
         input_shaft.part.move(Location((0,0,-10))),
         output_shaft.part, # Located at (0,0,0) to align with housing
-        bearing_vis.part.move(Location((0,0, pocket_center_z)))
+        bearing_vis.part.move(Location((0,0, pocket_center_z))),
+        *bolt_parts
     ]
 
     # 6. Impact Drive (Optional)
