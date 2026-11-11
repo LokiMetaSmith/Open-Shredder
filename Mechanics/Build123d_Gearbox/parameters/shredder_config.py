@@ -45,6 +45,18 @@ class BearingConfig:
     inner_diameter_mm: float = 30.0
     outer_diameter_mm: float = 55.0
     width_mm: float = 13.0
+    recess_tolerance_mm: float = 0.2 # 3D printing press-fit tolerance
+    end_support_outer_dia_mm: float = 62.0 # Support pillow block bearing OD
+
+@dataclass
+class FastenerConfig:
+    housing_bolt_spec: str = "M5"
+    housing_bolt_dia_mm: float = 5.0
+    housing_bolt_count: int = 4
+    housing_bolt_circle_mm: float = 100.0
+    insert_screw_spec: str = "M2.5"
+    insert_screw_dia_mm: float = 2.5
+    motor_mount_screw_dia_mm: float = 6.0
 
 @dataclass
 class ShredderSystemConfig:
@@ -53,6 +65,7 @@ class ShredderSystemConfig:
     shredder: ShredderConfig = field(default_factory=ShredderConfig)
     material: MaterialProperties = field(default_factory=MaterialProperties)
     bearing: BearingConfig = field(default_factory=BearingConfig)
+    fasteners: FastenerConfig = field(default_factory=FastenerConfig)
 
     def save_to_json(self, filepath: str):
         data = {
@@ -60,7 +73,8 @@ class ShredderSystemConfig:
             "gearbox": self.gearbox.__dict__,
             "shredder": self.shredder.__dict__,
             "material": self.material.__dict__,
-            "bearing": self.bearing.__dict__
+            "bearing": self.bearing.__dict__,
+            "fasteners": self.fasteners.__dict__
         }
         with open(filepath, 'w') as f:
             json.dump(data, f, indent=4)
@@ -77,6 +91,7 @@ class ShredderSystemConfig:
         if "shredder" in data: config.shredder = ShredderConfig(**data["shredder"])
         if "material" in data: config.material = MaterialProperties(**data["material"])
         if "bearing" in data: config.bearing = BearingConfig(**data["bearing"])
+        if "fasteners" in data: config.fasteners = FastenerConfig(**data["fasteners"])
 
         return config
 

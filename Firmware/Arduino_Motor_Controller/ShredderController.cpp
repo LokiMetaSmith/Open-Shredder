@@ -20,17 +20,23 @@ ShredderController::ShredderController(MotorInterface* motor) {
     _config.useImpactMode = false;
     _config.impactBackoffDuration = 1000;
     _config.maxJamRetries = 3;
+    _config.enableLoadDependentSpeed = false;
+    _config.loadDerateThreshold = 600;
+    _config.minForwardSpeed = 40;
+    _activeForwardSpeed = _config.forwardSpeed;
 }
 
 void ShredderController::setConfig(ShredderConfig config) {
     _config = config;
+    _activeForwardSpeed = _config.forwardSpeed;
 }
 
 void ShredderController::start() {
     _state = STATE_FORWARD;
     _stateStartTime = millis();
     _runStartTime = millis();
-    _motor->setSpeed(_config.forwardSpeed);
+    _activeForwardSpeed = _config.forwardSpeed;
+    _motor->setSpeed(_activeForwardSpeed);
     _jamCount = 0;
 }
 
@@ -66,12 +72,27 @@ void ShredderController::update() {
 
             // Inrush Masking: Ignore current spikes during the first 500ms of entering STATE_FORWARD
             if (now - _stateStartTime > 500) {
+                int currentLoad = _motor->getLoad();
+
                 // Check Jam/Fault
-                if (_motor->getLoad() > _config.currentLimit || _motor->isFaulted()) {
+                if (currentLoad > _config.currentLimit || _motor->isFaulted()) {
                     _state = STATE_JAM_DETECTED;
                     _stateStartTime = now;
                     _motor->stop();
                     _jamCount++;
+                } else if (_config.enableLoadDependentSpeed && currentLoad > _config.loadDerateThreshold) {
+                    // Elevated load detected: dynamically derate speed between forwardSpeed and minForwardSpeed
+                    int targetSpeed = map(currentLoad, _config.loadDerateThreshold, _config.currentLimit, _config.forwardSpeed, _config.minForwardSpeed);
+                    if (targetSpeed < _config.minForwardSpeed) targetSpeed = _config.minForwardSpeed;
+                    if (targetSpeed > _config.forwardSpeed) targetSpeed = _config.forwardSpeed;
+                    if (targetSpeed != _activeForwardSpeed) {
+                        _activeForwardSpeed = targetSpeed;
+                        _motor->setSpeed(_activeForwardSpeed);
+                    }
+                } else if (_config.enableLoadDependentSpeed && _activeForwardSpeed != _config.forwardSpeed) {
+                    // Normal load restored: restore full forward speed
+                    _activeForwardSpeed = _config.forwardSpeed;
+                    _motor->setSpeed(_activeForwardSpeed);
                 }
             }
             break;
@@ -99,7 +120,8 @@ void ShredderController::update() {
         case STATE_REVERSE_CLEARING:
             if (now - _stateStartTime > _config.reverseDuration) {
                 _state = STATE_FORWARD;
-                _motor->setSpeed(_config.forwardSpeed);
+                _activeForwardSpeed = _config.forwardSpeed;
+                _motor->setSpeed(_activeForwardSpeed);
                 _stateStartTime = now;
             }
             break;
@@ -115,12 +137,11 @@ void ShredderController::update() {
             break;
 
         case STATE_IMPACT_STRIKE:
-            // We stay in this mode for a minimum time to ensure we hit the object
-            // or we just switch back to FORWARD monitoring immediately?
-            // Let's switch to FORWARD after a brief acceleration period
+            // Switch back to FORWARD after a brief acceleration period
             if (now - _stateStartTime > 500) {
                 _state = STATE_FORWARD;
-                _motor->setSpeed(_config.forwardSpeed);
+                _activeForwardSpeed = _config.forwardSpeed;
+                _motor->setSpeed(_activeForwardSpeed);
                 _stateStartTime = now;
             }
             break;
@@ -134,4 +155,17 @@ void ShredderController::update() {
             _motor->stop();
             break;
     }
+}
+
+void ShredderController::printTelemetry() {
+    Serial.print("TELEMETRY:state=");
+    Serial.print(_state);
+    Serial.print(",load=");
+    Serial.print(_motor->getLoad());
+    Serial.print(",speed=");
+    Serial.print(_activeForwardSpeed);
+    Serial.print(",jams=");
+    Serial.print(_jamCount);
+    Serial.print(",fault=");
+    Serial.println(isFaulted() ? 1 : 0);
 }

@@ -270,11 +270,63 @@ void test_stepper_driver_behavior_and_alarm() {
     std::cout << "Stepper Driver Behavior and Alarm Test Passed!" << std::endl;
 }
 
+void test_load_dependent_speed_control_and_telemetry() {
+    std::cout << "Running Load-Dependent Speed Control and Telemetry Test..." << std::endl;
+
+    mock_millis = 0;
+    analogInputs.clear();
+    pinStates.clear();
+
+    DCDriver dc(3, 4, A0);
+    ShredderController controller(&dc);
+
+    ShredderConfig config;
+    config.forwardSpeed = 100;
+    config.reverseSpeed = 50;
+    config.currentLimit = 800;
+    config.loadDerateThreshold = 400;
+    config.minForwardSpeed = 30;
+    config.enableLoadDependentSpeed = true;
+
+    controller.setConfig(config);
+    controller.start();
+
+    // Past inrush masking
+    mock_millis += 600;
+    controller.update();
+    assert(controller.getActiveSpeed() == 100);
+
+    // Apply moderate load above threshold (e.g. 600, halfway between 400 and 800)
+    analogInputs[A0] = 600;
+    controller.update();
+    // Derated speed: map(600, 400, 800, 100, 30) = 100 + (600-400)*(30-100)/(400) = 65
+    assert(controller.getActiveSpeed() < 100);
+    assert(controller.getActiveSpeed() >= 30);
+    assert(controller.getState() == STATE_FORWARD);
+
+    // High load near limit (790)
+    analogInputs[A0] = 790;
+    controller.update();
+    assert(controller.getActiveSpeed() <= 35);
+    assert(controller.getActiveSpeed() >= 30);
+
+    // Return to low load (200)
+    analogInputs[A0] = 200;
+    controller.update();
+    assert(controller.getActiveSpeed() == 100);
+
+    // Verify Telemetry does not crash and prints
+    controller.printTelemetry();
+
+    std::cout << "Load-Dependent Speed Control and Telemetry Test Passed!" << std::endl;
+}
+
 int main() {
     test_dc_motor_jam_detection();
     test_impact_mode();
     test_max_jam_retries_and_fault_state();
     test_stepper_driver_behavior_and_alarm();
+    test_load_dependent_speed_control_and_telemetry();
     std::cout << "All Firmware Tests Passed Successfully!" << std::endl;
     return 0;
 }

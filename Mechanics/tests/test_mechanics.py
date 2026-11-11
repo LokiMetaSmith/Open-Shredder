@@ -130,3 +130,24 @@ def test_optimizer_agent_deterministic_run():
     validator = DesignValidator(optimized)
     validator.check_geometry()
     assert not any("Shaft too short" in e for e in validator.errors)
+
+def test_tune_shredder_evaluation():
+    from tune_shredder import evaluate_tuning, PLASTIC_DATABASE
+    cfg = ShredderSystemConfig()
+    cfg.gearbox.ratio = 25.0
+
+    for plastic in ["PET", "HDPE", "PP"]:
+        metrics = evaluate_tuning(cfg, plastic_code=plastic)
+        assert metrics["plastic"] == plastic
+        assert metrics["required_torque_nm"] > 0
+        assert metrics["available_torque_nm"] > 0
+        assert metrics["shaft_von_mises_stress_mpa"] > 0
+        assert metrics["shaft_safety_factor"] > 0
+
+def test_hopper_assembly_build():
+    from pusher_mechanism import hopper_assembly
+    cfg = ShredderSystemConfig()
+    hopper = hopper_assembly(cfg)
+    assert hopper is not None
+    # Verify compound has children (hopper body and guided pusher)
+    assert len(hopper.children) >= 2

@@ -50,15 +50,20 @@ class BOMGenerator:
         self.items.append(BOMItem("Hardware", f"Bearing ID {motor.shaft_diameter_mm}mm", 2, "Steel", "Input Shaft Support"))
 
         # Bolts for Motor Mount
-        self.items.append(BOMItem("Hardware", "Motor Mount Bolts", 4, "M5/M6", f"Length > {gearbox.housing_height_mm}mm"))
+        fasteners = self.config.fasteners
+        self.items.append(BOMItem("Hardware", f"Motor Mount Bolts (M{fasteners.motor_mount_screw_dia_mm:.0f})", 4, "Steel", f"Length > {gearbox.housing_height_mm}mm"))
 
         # Bolts for Housing Assembly
-        self.items.append(BOMItem("Hardware", "Housing Assembly Bolts", 4, "M5", "Length 50mm"))
+        self.items.append(BOMItem("Hardware", f"Housing Assembly Bolts ({fasteners.housing_bolt_spec})", fasteners.housing_bolt_count, "Steel", f"Length {gearbox.housing_height_mm + 10:.0f}mm on {fasteners.housing_bolt_circle_mm:.0f}mm BCD"))
+
+        # Bearing for Drum End Support
+        bearing_conf = self.config.bearing
+        self.items.append(BOMItem("Hardware", f"End Support Bearing ({bearing_conf.series})", 1, "Steel", f"OD {bearing_conf.end_support_outer_dia_mm}mm, ID {bearing_conf.inner_diameter_mm}mm"))
 
         # Inserts for Drum
         total_inserts = shredder.num_disks * shredder.num_teeth_per_disk
         self.items.append(BOMItem("Hardware", "Carbide Insert CCMT060204", total_inserts, "Carbide", "Cutting Edges"))
-        self.items.append(BOMItem("Hardware", "Insert Screw M2.5", total_inserts, "Steel", "Torx Head"))
+        self.items.append(BOMItem("Hardware", f"Insert Screw ({fasteners.insert_screw_spec})", total_inserts, "Steel", "Torx Head"))
 
         # 3. Printed Parts (Estimates)
         density = 1.25 # g/cm3 for PLA/PETG approx (1250 kg/m3)

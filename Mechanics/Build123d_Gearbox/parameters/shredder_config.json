@@ -36,6 +36,17 @@
         "series": "6006",
         "inner_diameter_mm": 30.0,
         "outer_diameter_mm": 55.0,
-        "width_mm": 13.0
+        "width_mm": 13.0,
+        "recess_tolerance_mm": 0.2,
+        "end_support_outer_dia_mm": 62.0
+    },
+    "fasteners": {
+        "housing_bolt_spec": "M5",
+        "housing_bolt_dia_mm": 5.0,
+        "housing_bolt_count": 4,
+        "housing_bolt_circle_mm": 100.0,
+        "insert_screw_spec": "M2.5",
+        "insert_screw_dia_mm": 2.5,
+        "motor_mount_screw_dia_mm": 6.0
     }
 }

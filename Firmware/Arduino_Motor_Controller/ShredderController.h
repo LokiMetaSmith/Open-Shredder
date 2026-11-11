@@ -24,6 +24,9 @@ struct ShredderConfig {
     bool useImpactMode;       // Use "Back up + Strike" strategy
     unsigned long impactBackoffDuration; // ms
     int maxJamRetries;        // Maximum consecutive jam retries before faulting (0 = infinite)
+    bool enableLoadDependentSpeed; // Dynamically derate forward speed under elevated load
+    int loadDerateThreshold;  // ADC load above which speed begins reducing
+    int minForwardSpeed;      // Minimum forward speed during derating
 };
 
 class ShredderController {
@@ -35,6 +38,7 @@ private:
     unsigned long _stateStartTime;
     unsigned long _runStartTime;
     int _jamCount;
+    int _activeForwardSpeed;
 
 public:
     ShredderController(MotorInterface* motor);
@@ -44,9 +48,11 @@ public:
     void stop();
     void resetFault();
     void update(); // Main Loop Logic
+    void printTelemetry(); // Serial telemetry reporting
 
     ShredderState getState() { return _state; }
     int getJamCount() { return _jamCount; }
+    int getActiveSpeed() { return _activeForwardSpeed; }
     bool isFaulted() { return _state == STATE_FAULTED; }
 };
 
