@@ -158,11 +158,29 @@ if __name__ == "__main__":
     else:
         cfg = default_config
 
+    import argparse
+    parser = argparse.ArgumentParser(description="Optimize design parameters for OpenShredder.")
+    parser.add_argument("--config", type=str, default=None, help="Path to input config JSON")
+    parser.add_argument("--output", type=str, default=None, help="Path to output optimized config JSON")
+    parser.add_argument("--steps", type=int, default=100, help="Number of optimization steps")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed for deterministic optimization")
+    args = parser.parse_args()
+
+    if args.seed is not None:
+        random.seed(args.seed)
+
+    if args.config and os.path.exists(args.config):
+        cfg = ShredderSystemConfig.load_from_json(args.config)
+    elif os.path.exists(config_path):
+        cfg = ShredderSystemConfig.load_from_json(config_path)
+    else:
+        cfg = default_config
+
     agent = DesignOptimizerAgent(cfg)
-    optimized_cfg = agent.run(steps=100)
+    optimized_cfg = agent.run(steps=args.steps)
 
     # Save optimized
-    optimized_path = os.path.join(os.path.dirname(__file__), 'parameters', 'optimized_shredder_config.json')
+    optimized_path = args.output if args.output else os.path.join(os.path.dirname(__file__), 'parameters', 'optimized_shredder_config.json')
     optimized_cfg.save_to_json(optimized_path)
     print(f"Saved optimized config to {optimized_path}")
 

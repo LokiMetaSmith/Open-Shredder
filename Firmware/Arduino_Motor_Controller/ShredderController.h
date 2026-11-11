@@ -11,7 +11,8 @@ enum ShredderState {
     STATE_REVERSE_CLEARING,
     STATE_IMPACT_PREP_BACKOFF,
     STATE_IMPACT_STRIKE,
-    STATE_PAUSED
+    STATE_PAUSED,
+    STATE_FAULTED
 };
 
 struct ShredderConfig {
@@ -22,6 +23,7 @@ struct ShredderConfig {
     unsigned long reverseDuration; // ms (time to back up during normal clear)
     bool useImpactMode;       // Use "Back up + Strike" strategy
     unsigned long impactBackoffDuration; // ms
+    int maxJamRetries;        // Maximum consecutive jam retries before faulting (0 = infinite)
 };
 
 class ShredderController {
@@ -40,9 +42,12 @@ public:
     void setConfig(ShredderConfig config);
     void start();
     void stop();
+    void resetFault();
     void update(); // Main Loop Logic
 
     ShredderState getState() { return _state; }
+    int getJamCount() { return _jamCount; }
+    bool isFaulted() { return _state == STATE_FAULTED; }
 };
 
 #endif

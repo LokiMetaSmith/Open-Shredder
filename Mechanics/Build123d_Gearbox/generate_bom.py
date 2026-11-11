@@ -109,24 +109,35 @@ class BOMGenerator:
                 ])
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Generate Bill of Materials (BOM) CSV from config.")
+    parser.add_argument("--config", type=str, default=None, help="Path to configuration JSON")
+    parser.add_argument("--output", type=str, default="BOM.csv", help="Output CSV path (default: BOM.csv)")
+    args = parser.parse_args()
+
     print("Generating Bill of Materials...")
 
-    # Load optimized or default
-    optimized_path = os.path.join(os.path.dirname(__file__), 'parameters', 'optimized_shredder_config.json')
-    default_path = os.path.join(os.path.dirname(__file__), 'parameters', 'shredder_config.json')
+    if args.config and os.path.exists(args.config):
+        cfg_path = args.config
+    else:
+        optimized_path = os.path.join(os.path.dirname(__file__), 'parameters', 'optimized_shredder_config.json')
+        default_path = os.path.join(os.path.dirname(__file__), 'parameters', 'shredder_config.json')
+        if os.path.exists(optimized_path):
+            cfg_path = optimized_path
+        elif os.path.exists(default_path):
+            cfg_path = default_path
+        else:
+            cfg_path = None
 
-    if os.path.exists(optimized_path):
-        print(f"Using optimized config: {optimized_path}")
-        cfg = ShredderSystemConfig.load_from_json(optimized_path)
-    elif os.path.exists(default_path):
-        print(f"Using default config: {default_path}")
-        cfg = ShredderSystemConfig.load_from_json(default_path)
+    if cfg_path:
+        print(f"Using config: {cfg_path}")
+        cfg = ShredderSystemConfig.load_from_json(cfg_path)
     else:
         cfg = default_config
 
     bom = BOMGenerator(cfg)
     bom.generate()
 
-    output_path = "BOM.csv"
+    output_path = args.output
     bom.write_csv(output_path)
     print(f"BOM saved to {output_path}")
